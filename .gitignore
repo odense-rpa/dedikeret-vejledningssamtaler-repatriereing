@@ -78,6 +78,20 @@ logs/
 *.sqlite
 *.sqlite3
 
+# Certificates and Keys
+*.pem
+*.crt
+*.cer
+*.key
+*.pfx
+*.p12
+*.der
+*.csr
+*.keystore
+*.jks
+certificates/
+certs/
+
 # Temporary files
 *.tmp
 .cache/

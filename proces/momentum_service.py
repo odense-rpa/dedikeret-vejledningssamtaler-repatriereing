@@ -54,3 +54,7 @@ class MomentumService:
         borgere = {borger['cpr']: borger for borger in result['data']}
 
         return borgere
+    
+    def håndter_borger_i_målgruppe(self, momentum_borger: dict):
+        # supplerende_sager = self.momentum.
+        return None

@@ -8,19 +8,23 @@ class DWHService:
             tracker: Tracker,
             username: str,
             password: str,
+            server: str,
+            database: str
             ):
         self.tracker = tracker
         self.username = username
         self.password = password
+        self.server = server
+        self.database = database
         self._connection = None
 
     def __enter__(self):
         if not self._connection:
             self._connection = pymssql.connect(
-                server="rpa.sql.odknet.dk",
+                server=self.server,
                 user=self.username,
                 password=self.password,
-                database="RPA_Dataudveksling_DWH",
+                database=self.database,
             )
         return self
 

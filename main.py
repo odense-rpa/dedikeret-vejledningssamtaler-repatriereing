@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sys
 import pydoc
 from datetime import date
@@ -8,12 +9,21 @@ from dateutil.relativedelta import relativedelta
 from automation_server_client import AutomationServer, Workqueue, WorkItemError, Credential, WorkItemStatus
 from momentum_client.manager import MomentumClientManager
 from proces.momentum_service import MomentumService
+from proces.datafordeler_service import DatafordelerService
+from odk_skat import EIndkomstKlient, EIndkomstKonfiguration
+from datafordeler import Datafordeler
 from proces.dwh_service import DWHService
 from proces.models import Borger
+from proces.skat_service import SkatService
 from odk_tools.tracking import Tracker
 
 momentum: MomentumClientManager
 tracker: Tracker
+datafordeler: Datafordeler
+fordeler_service: DatafordelerService
+indkomst_klient: EIndkomstKlient
+konfiguration: EIndkomstKonfiguration
+skat_service: SkatService
 
 
 async def populate_queue(workqueue: Workqueue):
@@ -50,7 +60,7 @@ async def populate_queue(workqueue: Workqueue):
             findes_i_dwh=True,
             findes_i_momentum=findes_i_momentum
         )
-        
+            
         workqueue.add_item(reference=dwh_cpr, data=borger.model_dump())
         logger.info(f"Added borger from DWH: {dwh_cpr}, findes i momentum: {findes_i_momentum}")
     
@@ -79,14 +89,23 @@ async def process_workqueue(workqueue: Workqueue):
 
     for item in workqueue:
         with item:
-            data = item.data  # Item data deserialized from json as dict
- 
+            borger =  Borger.model_validate(item.data)  # Item data deserialized from json as dict            
             try:
-                # Process the item here
-                pass
+                
+                i_målgruppe = skat_service.kontroller_om_borger_i_målgruppe(borger.cpr)
+                
+                if i_målgruppe or borger.findes_i_momentum:
+                    try:
+                        momentum_borger = momentum.borgere.hent_borger(borger.cpr)
+                    except: 
+                        # Til manuel
+                        raise WorkItemError("Ikke muligt at hente borger fra Momentum")
+                
+                
+
             except WorkItemError as e:
                 # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
-                logger.error(f"Error processing item: {data}. Error: {e}")
+                logger.error(f"Error processing item: {borger}. Error: {e}")
                 item.fail(str(e))
 
 
@@ -105,10 +124,17 @@ if __name__ == "__main__":
     dwh_service = DWHService(
         tracker,
         tracker_credentials.username,
-        tracker_credentials.password
+        password=tracker_credentials.password,
+        server=tracker_credentials.data["server"],
+        database=tracker_credentials.data["database"]
     )
-
-
+    
+    certifikat_sti = os.getenv("CERTIFIKATER", "certifikater")
+    datafordeler = Datafordeler(
+        certifikat_sti=os.path.join(certifikat_sti, "datafordeler.crt"),
+        certifikat_nøglefil=os.path.join(certifikat_sti, "datafordeler.key"),
+    )
+    
     momentum_credential = Credential.get_credential("Momentum - produktion")
     momentum = MomentumClientManager(
         base_url=momentum_credential.data["base_url"],
@@ -122,6 +148,28 @@ if __name__ == "__main__":
     momentum_service = MomentumService(
         momentum,
         tracker
+    )
+    
+    fordeler_service = DatafordelerService(
+        datafordeler
+    )
+    
+    konfiguration = EIndkomstKonfiguration(
+        se_nummer=os.environ["SE-NUMMER"],
+        abonnement_type_kode=os.environ["ABONNEMENT_TYPE_KODE"],
+        abonnent_type_kode=os.environ["ABONNENT_TYPE_KODE"],
+        adgang_formaal_type_kode=os.environ["ADGANGS_KODE"],
+        noegle_adgangskode=os.environ["NOEGLE_ADGANGSKODE"],
+        noegle_sti=os.path.join(certifikat_sti, "skat-prod-noegle.pem"),
+        certifikat_sti=os.path.join(certifikat_sti, "skat-prod-certifikat.pem")
+    )
+    
+    indkomst_klient = EIndkomstKlient(
+        konfiguration, miljoe="prod"
+    )
+    
+    skat_service = SkatService(
+        indkomst_klient
     )
 
     # Queue management
