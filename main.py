@@ -24,6 +24,7 @@ fordeler_service: DatafordelerService
 indkomst_klient: EIndkomstKlient
 konfiguration: EIndkomstKonfiguration
 skat_service: SkatService
+momentum_service: MomentumService
 
 
 async def populate_queue(workqueue: Workqueue):
@@ -82,26 +83,34 @@ async def populate_queue(workqueue: Workqueue):
 
 
 
-async def process_workqueue(workqueue: Workqueue):
+async def process_workqueue(workqueue: Workqueue, sagsbehandler_initialer: str):
     logger = logging.getLogger(__name__)
 
-    logger.info("Hello from process workqueue!")
+    sagsbehandler = momentum.momentum_client.søg(sagsbehandler_initialer, "Caseworker")
+    if sagsbehandler is not None and len(sagsbehandler) == 1:
+        sagsbehandler = sagsbehandler[0]
+
+    # sagsbehandler_rpa = momentum.momentum_client.søg("Odense RPA", "Caseworker")
+    # if sagsbehandler_rpa is not None and len(sagsbehandler_rpa) == 1:
+    #     sagsbehandler_rpa = sagsbehandler_rpa[0]
 
     for item in workqueue:
         with item:
             borger =  Borger.model_validate(item.data)  # Item data deserialized from json as dict            
-            try:
-                
+            try:                
                 i_målgruppe = skat_service.kontroller_om_borger_i_målgruppe(borger.cpr)
                 
-                if i_målgruppe or borger.findes_i_momentum:
-                    try:
-                        momentum_borger = momentum.borgere.hent_borger(borger.cpr)
-                    except: 
-                        # Til manuel
-                        raise WorkItemError("Ikke muligt at hente borger fra Momentum")
-                
-                
+                if not i_målgruppe and not borger.findes_i_momentum:
+                    continue
+
+                momentum_borger = momentum.borgere.hent_borger(borger.cpr)
+
+
+
+                if momentum_borger is None:
+                    raise WorkItemError("Kunne ikke hente momentum borger")
+                                
+                momentum_service.håndter_borger_ikke_i_målgruppe(momentum_borger)
 
             except WorkItemError as e:
                 # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
@@ -111,6 +120,13 @@ async def process_workqueue(workqueue: Workqueue):
 
 if __name__ == "__main__":
     ats = AutomationServer.from_environment()
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(logging.Formatter("[%(levelname)s] %(name)s: %(message)s"))
+    root_logger.addHandler(console_handler)
+
     workqueue = ats.workqueue()
 
     # Initialize external systems for automation here..
@@ -178,5 +194,10 @@ if __name__ == "__main__":
         asyncio.run(populate_queue(workqueue))
         exit(0)
 
+    if "--sagsbehandler" in sys.argv:
+        sagsbehandler_initialer = sys.argv[sys.argv.index("--sagsbehandler") + 1]
+    else:
+        sagsbehandler_initialer = os.environ["SAGSBEHANDLER"]
+    
     # Process workqueue
-    asyncio.run(process_workqueue(workqueue))
+    asyncio.run(process_workqueue(workqueue, sagsbehandler_initialer))
