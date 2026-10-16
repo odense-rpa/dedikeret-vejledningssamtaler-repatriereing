@@ -25,7 +25,7 @@ konfiguration: EIndkomstKonfiguration
 skat_service: SkatService
 momentum_service: MomentumService
 
-procesnavn = "D	Dedikeret vejledningssamtaler - Repatriering"
+procesnavn = "Dedikeret vejledningssamtaler - Repatriering"
 
 
 async def populate_queue(workqueue: Workqueue):
