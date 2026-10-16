@@ -99,6 +99,7 @@ async def process_workqueue(workqueue: Workqueue, sagsbehandler_initialer: str):
                 i_målgruppe = skat_service.kontroller_om_borger_i_målgruppe(borger.cpr)
                 
                 if not i_målgruppe and not borger.findes_i_momentum:
+                    logger.info("Borger ej i målgruppe eller i momentum, stopper behandling")
                     tracker.track_partial_task(procesnavn)
                     continue
 
@@ -108,8 +109,10 @@ async def process_workqueue(workqueue: Workqueue, sagsbehandler_initialer: str):
                     raise WorkItemError("Kunne ikke hente momentum borger")
                 
                 if i_målgruppe:
+                    logger.info("Borger i målgruppe")
                     momentum_service.håndter_borger_i_målgruppe(momentum_borger, sagsbehandler, borger)
                 else:
+                    logger.info("Boger ikke længere i målgruppe")
                     momentum_service.håndter_borger_ikke_i_målgruppe(momentum_borger)
 
             except WorkItemError as e:
