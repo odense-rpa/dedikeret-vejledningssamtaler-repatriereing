@@ -146,7 +146,7 @@ if __name__ == "__main__":
         database=tracker_credentials.data["database"]
     )
     
-    certifikat_sti = os.getenv("CERTIFIKATER", "certifikater")
+    certifikat_sti = os.getenv("CERTIFIKATER", "/certifikater")
     datafordeler = Datafordeler(
         certifikat_sti=os.path.join(certifikat_sti, "datafordeler.crt"),
         certifikat_nøglefil=os.path.join(certifikat_sti, "datafordeler.key"),
