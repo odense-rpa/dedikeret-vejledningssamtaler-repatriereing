@@ -131,6 +131,7 @@ if __name__ == "__main__":
 
     # Initialize external systems for automation here..
     tracker_credentials = Credential.get_credential("Odense SQL Server")
+    skat_credential = Credential.get_credential("Skat - Udrejsebreve") 
 
     tracker = Tracker(
         username=tracker_credentials.username,
@@ -172,11 +173,11 @@ if __name__ == "__main__":
     )
     
     konfiguration = EIndkomstKonfiguration(
-        se_nummer=os.environ["SE-NUMMER"],
-        abonnement_type_kode=os.environ["ABONNEMENT_TYPE_KODE"],
-        abonnent_type_kode=os.environ["ABONNENT_TYPE_KODE"],
-        adgang_formaal_type_kode=os.environ["ADGANGS_KODE"],
-        noegle_adgangskode=os.environ["NOEGLE_ADGANGSKODE"],
+        se_nummer=skat_credential.data["se_nummer"],
+        abonnement_type_kode=skat_credential.data["abonnement_type_kode"],
+        abonnent_type_kode=skat_credential.data["abonnent_type_kode"],
+        adgang_formaal_type_kode=skat_credential.data["adgang_formaal_type_kode"],
+        noegle_adgangskode=skat_credential.password,
         noegle_sti=os.path.join(certifikat_sti, "skat-prod-noegle.pem"),
         certifikat_sti=os.path.join(certifikat_sti, "skat-prod-certifikat.pem")
     )
