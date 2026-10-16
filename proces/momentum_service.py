@@ -4,6 +4,7 @@ from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 from proces.models import Borger
 from automation_server_client import WorkItemError
+from odk_tools.tracking import Tracker
 
 OPGAVE_TITEL_PRÆFIKSER = (
     "Afhold dedikeret vejledningssamtale om repatirering - Statsborgerskab",  # TODO: Fjern stavefejl
@@ -22,11 +23,13 @@ class MomentumService:
     def __init__(
             self,
             momentum: MomentumClientManager,
-            tracker: Tracker
+            tracker: Tracker,
+            procesnavn: str
             ):
         
         self.momentum = momentum
         self.tracker = tracker
+        self.procesnavn = procesnavn
 
     
     def find_borgere(self) -> dict[str, dict] | None:
@@ -71,7 +74,7 @@ class MomentumService:
 
         return borgere
     
-    def håndter_borger_i_målgruppe(self, momentum_borger: dict, sagsbehandler: dict, borger: Borger):
+    def håndter_borger_i_målgruppe(self, momentum_borger: dict, sagsbehandler, borger: Borger):
 
 
         supplerende_sager = self.momentum.borgere.hent_supplerendesager(momentum_borger)
@@ -80,18 +83,18 @@ class MomentumService:
         if supplerende_sager is not None:
             for sag in supplerende_sager:
                 # Denne sag tjekkes der for og hvis den findes på borger skal behandling stoppes.
-                if sag.get("title") == "Repatriering - diversesag" and not sag.get("closingReasonCode"):
+                if sag.get("name") == "Repatriering - diversesag" and sag.get("endDate") is None:
                     return None
                 # Tjekker om denne sag findes, ellers skal den oprettes.
-                if sag.get("title") == "Dedikeret vejledningssamtale om repatriering - diversesag" and not sag.get("closingReasonCode"):
+                if sag.get("name") == "Dedikeret vejledningssamtale om repatriering - diversesag" and sag.get("endDate") is None:
                     har_repatrierings_sag = True
 
         målgrupper = self.momentum.borgere.hent_målgrupper(momentum_borger)
 
         if målgrupper is not None:
-            for målgruppe in målgrupper:
-                if not målgruppe.get("closingReasonCode"):
-                    self.momentum.borgere.opret_målgruppe(momentum_borger, "NB", date.today(), sagsbehandler)
+            alle_lukket = all(mg.get("closingReasonCode") is not None for mg in målgrupper)
+            if alle_lukket:
+                self.momentum.borgere.opret_målgruppe(momentum_borger, "NB", date.today(), sagsbehandler)
         
         if not har_repatrierings_sag:
             self.momentum.borgere.opret_supplerendesag(momentum_borger, "Dedikeret vejledningssamtale om repatriering - diversesag", date.today(), sagsbehandler)
@@ -119,29 +122,35 @@ class MomentumService:
                 break
 
         if not findes_opgave:
-            forfaldsdato = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0) + relativedelta(months=1)
+            # TODO: Midlertidig fast dato - fjern og brug linjen nedenfor igen
+            # forfaldsdato = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0) + relativedelta(months=1)
+            forfaldsdato = datetime(2026, 11, 2)
             opgavenavn = f"Afhold dedikeret vejledningssamtale om repatirering - Statsborgerskab: {borger.oprindelsesland} - Odense RPA"
             beskrivelse = "Denne borger er i målgruppe for indkaldelse til møde om repatriering"
             self.momentum.opgaver.opret_opgave(momentum_borger, [sagsbehandler], forfaldsdato, opgavenavn, beskrivelse)
 
-        try:
-            brev = self.momentum.borgere.opret_brev(
-                momentum_borger, 
-                sagsbehandler, 
-                titel="Dedikeret vejledningsamtale",
-                brevskabelonsnavn="Repatriering - Information om rettigheder - ODK.O.013")
-        except Exception as e:
-            raise WorkItemError(f"Fejl i oprettelse af brevet: {e}")
+            try:
+                brev = self.momentum.borgere.opret_brev(
+                    momentum_borger, 
+                    sagsbehandler, 
+                    titel="Dedikeret vejledningsamtale",
+                    brevskabelonsnavn="Repatriering - Information om rettigheder - ODK.O.013")
+            except Exception as e:
+                raise WorkItemError(f"Fejl i oprettelse af brevet: {e}")
 
-        try:
-            self.momentum.borgere.send_brev(
-                momentum_borger, 
-                str(brev), 
-                "Dedikeret vejledningssamtale om repatriering - diversesag")
-        except Exception as e:
-            raise WorkItemError(f"Fejl i send brev, men brevet er oprettet: {e}")
-        
-        agenda = self.momentum.borgere.tilføj_agenda_til_borger(momentum_borger, "Dedikeret vejledningssamtale – repatriering")
+            try:
+                self.momentum.borgere.send_brev(
+                    momentum_borger, 
+                    str(brev), 
+                    "Dedikeret vejledningssamtale om repatriering - diversesag")
+            except Exception as e:
+                raise WorkItemError(f"Fejl i send brev, men brevet er oprettet: {e}")
+            
+            self.momentum.borgere.tilføj_agenda_til_borger(momentum_borger, "Dedikeret vejledningssamtale – repatriering")
+            self.tracker.track_task(self.procesnavn)
+        else:
+            self.momentum.borgere.tilføj_agenda_til_borger(momentum_borger, "Dedikeret vejledningssamtale – repatriering")
+            self.tracker.track_partial_task(self.procesnavn)
 
     def håndter_borger_ikke_i_målgruppe(self, momentum_borger: dict):
         målgrupper = self.momentum.borgere.hent_målgrupper(momentum_borger)
@@ -198,6 +207,8 @@ class MomentumService:
                 opgave["id"],
                 self.momentum.opgaver.Status.aflyst,
             )
+            
+        self.tracker.track_task(self.procesnavn)
 
     def hent_aktør(self, id: str) -> dict:
         aktør = self.momentum.momentum_client.get(f"/actors/{id}/details")

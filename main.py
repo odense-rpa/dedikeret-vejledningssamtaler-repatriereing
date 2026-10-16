@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 import sys
-import pydoc
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
@@ -25,6 +24,8 @@ indkomst_klient: EIndkomstKlient
 konfiguration: EIndkomstKonfiguration
 skat_service: SkatService
 momentum_service: MomentumService
+
+procesnavn = "D	Dedikeret vejledningssamtaler - Repatriering"
 
 
 async def populate_queue(workqueue: Workqueue):
@@ -80,9 +81,6 @@ async def populate_queue(workqueue: Workqueue):
         workqueue.add_item(reference=momentum_cpr,data=borger.model_dump())
         logger.info(f"Added borger from Momentum only: {momentum_cpr}")
 
-
-
-
 async def process_workqueue(workqueue: Workqueue, sagsbehandler_initialer: str):
     logger = logging.getLogger(__name__)
 
@@ -96,21 +94,23 @@ async def process_workqueue(workqueue: Workqueue, sagsbehandler_initialer: str):
 
     for item in workqueue:
         with item:
-            borger =  Borger.model_validate(item.data)  # Item data deserialized from json as dict            
+            borger = Borger.model_validate(item.data)  # Item data deserialized from json as dict            
             try:                
                 i_målgruppe = skat_service.kontroller_om_borger_i_målgruppe(borger.cpr)
                 
                 if not i_målgruppe and not borger.findes_i_momentum:
+                    tracker.track_partial_task(procesnavn)
                     continue
 
                 momentum_borger = momentum.borgere.hent_borger(borger.cpr)
 
-
-
                 if momentum_borger is None:
                     raise WorkItemError("Kunne ikke hente momentum borger")
-                                
-                momentum_service.håndter_borger_ikke_i_målgruppe(momentum_borger)
+                
+                if i_målgruppe:
+                    momentum_service.håndter_borger_i_målgruppe(momentum_borger, sagsbehandler, borger)
+                else:
+                    momentum_service.håndter_borger_ikke_i_målgruppe(momentum_borger)
 
             except WorkItemError as e:
                 # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
@@ -163,7 +163,8 @@ if __name__ == "__main__":
 
     momentum_service = MomentumService(
         momentum,
-        tracker
+        tracker,
+        procesnavn
     )
     
     fordeler_service = DatafordelerService(
