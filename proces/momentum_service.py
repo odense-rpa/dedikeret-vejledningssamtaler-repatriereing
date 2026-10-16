@@ -17,7 +17,7 @@ OPGAVE_LUK_PRÆFIKSER = (
 )
 BREV_OPGAVE_TITEL = "Brev sendt omkring repatriering - robot"
 
-LUKKEKODE_IY = ""  # TODO: Udfyld taksonomikode for lukkeårsag
+LUKKEKODE_NAVN = "Ej i målgruppe for repatriering"
 
 class MomentumService:
     def __init__(
@@ -30,8 +30,20 @@ class MomentumService:
         self.momentum = momentum
         self.tracker = tracker
         self.procesnavn = procesnavn
+        self.LUKKEKODE_IY = self._find_lukkekode(LUKKEKODE_NAVN)
 
-    
+    def _find_lukkekode(self, navn: str) -> str:
+        gruppe = self.momentum.taksonomier.find_taksonomi_gruppe("CLOSING_CAUSE_TYPE")
+        if gruppe is None:
+            raise ValueError("Taksonomigruppen CLOSING_CAUSE_TYPE blev ikke fundet")
+
+        koder = [t["code"] for t in gruppe.get("taxons", []) if t.get("name") == navn]
+
+        if len(koder) != 1:
+            raise ValueError(f"Forventede præcis én lukkekode med navnet '{navn}', fandt {len(koder)}")
+
+        return koder[0]
+
     def find_borgere(self) -> dict[str, dict] | None:
 
         query: dict = {
@@ -166,10 +178,13 @@ class MomentumService:
                 and not målgruppe.get("closingReasonCode")
                 and målgruppens_opretter.get("displayName") == "Odense RPA"
             ):
+
+                self.momentum.taksonomier.find_taksonomi_gruppe("CLOSING_CAUSE_TYPE")
+                
                 self.momentum.borgere.luk_målgruppe(
                     momentum_borger,
                     målgruppe,
-                    LUKKEKODE_IY,
+                    self.LUKKEKODE_IY,
                     "Borger er ikke i målgruppe for dedikeret vejledningssamtale",
                     date.today(),
                 )
