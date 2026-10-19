@@ -144,9 +144,7 @@ class MomentumService:
                 break
 
         if not findes_opgave:
-            # TODO: Midlertidig fast dato - fjern og brug linjen nedenfor igen
-            # forfaldsdato = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0) + relativedelta(months=1)
-            forfaldsdato = datetime(2026, 11, 2)
+            forfaldsdato = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0) + relativedelta(months=1)
             opgavenavn = f"Afhold dedikeret vejledningssamtale om repatirering - Statsborgerskab: {borger.oprindelsesland} - Odense RPA"
             beskrivelse = "Denne borger er i målgruppe for indkaldelse til møde om repatriering"
             logger.info("Borger har ikke repatrieringsopgave, der er oprettes en")

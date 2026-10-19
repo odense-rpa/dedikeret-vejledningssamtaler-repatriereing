@@ -109,7 +109,7 @@ async def process_workqueue(workqueue: Workqueue, sagsbehandler_initialer: str):
                     raise WorkItemError("Kunne ikke hente momentum borger")
                 
                 if i_målgruppe:
-                    logger.info("Borger i målgruppe")
+                    logger.info("Borger i målgruppe for repatriereing")
                     momentum_service.håndter_borger_i_målgruppe(momentum_borger, sagsbehandler, borger)
                 else:
                     logger.info("Boger ikke længere i målgruppe")
