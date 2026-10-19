@@ -8,9 +8,7 @@ from dateutil.relativedelta import relativedelta
 from automation_server_client import AutomationServer, Workqueue, WorkItemError, Credential, WorkItemStatus
 from momentum_client.manager import MomentumClientManager
 from proces.momentum_service import MomentumService
-from proces.datafordeler_service import DatafordelerService
 from odk_skat import EIndkomstKlient, EIndkomstKonfiguration
-from datafordeler import Datafordeler
 from proces.dwh_service import DWHService
 from proces.models import Borger
 from proces.skat_service import SkatService
@@ -18,8 +16,6 @@ from odk_tools.tracking import Tracker
 
 momentum: MomentumClientManager
 tracker: Tracker
-datafordeler: Datafordeler
-fordeler_service: DatafordelerService
 indkomst_klient: EIndkomstKlient
 konfiguration: EIndkomstKonfiguration
 skat_service: SkatService
@@ -150,10 +146,6 @@ if __name__ == "__main__":
     )
     
     certifikat_sti = os.getenv("CERTIFIKATER", "/certifikater")
-    datafordeler = Datafordeler(
-        certifikat_sti=os.path.join(certifikat_sti, "datafordeler.crt"),
-        certifikat_nøglefil=os.path.join(certifikat_sti, "datafordeler.key"),
-    )
     
     momentum_credential = Credential.get_credential("Momentum - produktion")
     momentum = MomentumClientManager(
@@ -169,10 +161,6 @@ if __name__ == "__main__":
         momentum,
         tracker,
         procesnavn
-    )
-    
-    fordeler_service = DatafordelerService(
-        datafordeler
     )
     
     konfiguration = EIndkomstKonfiguration(
